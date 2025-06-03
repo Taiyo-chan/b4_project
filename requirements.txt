@@ -1,0 +1,18 @@
+opencv-python
+face_recognition
+dlib
+numpy
+matplotlib
+pykakasi
+subprocess
+json
+http.server
+requests
+threading
+logging
+random
+time
+
+# google.generativeai as genai
+
+git+https://github.com/ageitgey/face_recognition_models

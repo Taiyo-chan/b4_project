@@ -1,4 +1,4 @@
-# gui_face.py
+# gui_face_recognition.py
 # 顔撮影用GUI
 
 import tkinter as tk
@@ -8,12 +8,19 @@ import cv2
 import os
 import datetime
 import pykakasi  # ローマ字変換用ライブラリをインポート
+import subprocess # 12.pyを自動的に実行するために必要
+
 
 # encode_faces.py の関数をインポート
 from encode_faces import encode_faces
 
 # recognize_faces() を収録しているスクリプトをインポート
-from test_multi_realtime import recognize_faces  
+from test_multi_realtime import recognize_faces
+
+#発話者の名前をグローバル変数として定義
+recognized_name = None
+
+launched_names = set()
 
 # ─── 定数 ───────────────────────────────────────────────
 DATASET_DIR = "face_dataset"   # 顔画像を保存するフォルダ名
@@ -156,6 +163,8 @@ def show_countdown():
     else:
         countdown_label.place_forget()
         take_photo()
+        
+
 
 
 def take_photo():
@@ -164,6 +173,17 @@ def take_photo():
     その後 encode_faces.encode_faces() を呼び出して known_faces.pkl を更新する。
     """
     global capturing, unknown_detected
+    # current_speaker.txt を更新
+    recognized_name = surname_kanji_var.get().strip() + givenname_kanji_var.get().strip()
+    with open("current_speaker.txt", "w", encoding="utf-8") as f:
+        f.write(recognized_name)
+
+    # 12.py 起動（初回のみ）
+    if recognized_name not in launched_names:
+        subprocess.Popen(["python", "12.py"])
+        launched_names.add(recognized_name)
+
+
     if current_frame is None:
         capturing = False
         return
@@ -189,11 +209,12 @@ def take_photo():
     print(f"Saved: {save_path}")
 
     # ─── 写真を保存した直後に encode_faces() を実行 ───────────────────────────
-    encode_faces()
+    #encode_faces()
 
     capturing = False
     unknown_detected = False
     clear_form()
+
 
 
 def clear_form():
@@ -235,6 +256,7 @@ def update_frame():
     current_frame = frame.copy()
     detections = recognize_faces(frame)
 
+
     detected_unknown = False
     # 検出結果に応じて枠と名前を描画
     for (top, right, bottom, left, name) in detections:
@@ -243,6 +265,19 @@ def update_frame():
         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
         cv2.putText(frame, name, (left, top - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 0), 2)
+        
+    global recognized_name
+    for (_, _, _, _, name) in detections:
+        if name != "Unknown":
+            recognized_name = name
+            with open("current_speaker.txt", "w", encoding="utf-8") as f:
+                f.write(recognized_name)
+            
+            if recognized_name not in launched_names:
+                print(f"🚀 {recognized_name} を対象に 12.py を起動します")
+                subprocess.Popen(["python", "12.py"])  # ←非同期で起動（ウィンドウ閉じない）
+                launched_names.add(recognized_name)
+            break  # 最初に見つけた人物だけ保存（複数検出時の対策）
 
     # Unknown が検出されていて、なおかつまだ撮影中でなければフォームを有効化
     if detected_unknown and not capturing:
@@ -274,6 +309,9 @@ root.after(0, update_frame)
 
 # ─── ウィンドウを閉じるときの後処理 ──────────────────────────────────────
 def on_closing():
+    print("🧠 顔エンコーディングを開始します...")
+    encode_faces()
+    print("✅ エンコーディング完了")
     video.release()
     root.destroy()
 
